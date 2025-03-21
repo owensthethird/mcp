@@ -1,0 +1,42 @@
+{
+  "nodes": [
+    {
+      "name": "Town Square",
+      "type": "location",
+      "properties": {
+        "description": "A bustling town square with merchants and travelers",
+        "visited": false,
+        "danger_level": 1
+      }
+    },
+    {
+      "name": "Dark Forest",
+      "type": "location",
+      "properties": {
+        "description": "A dense forest with little light penetrating the canopy",
+        "visited": false,
+        "danger_level": 3
+      }
+    },
+    {
+      "name": "Guardian",
+      "type": "character",
+      "properties": {
+        "description": "A mysterious figure guarding the entrance",
+        "health": 100,
+        "strength": 8,
+        "friendly": true
+      }
+    },
+    {
+      "name": "Ancient Ruins",
+      "type": "location",
+      "properties": {
+        "description": "The remains of an ancient civilization",
+        "visited": false,
+        "danger_level": 4,
+        "contains_treasure": true
+      }
+    }
+  ]
+} 

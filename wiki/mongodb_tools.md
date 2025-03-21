@@ -47,6 +47,15 @@ python bin/mongo_tools_cli.py edge get --name "Source Node"
 python bin/mongo_tools_cli.py stats
 python bin/mongo_tools_cli.py snapshot create
 python bin/mongo_tools_cli.py clear --collection nodes
+
+# Drop a database (use with caution)
+python bin/mongo_tools_cli.py drop --db test_db --confirm test_db
+
+# Batch operations
+python bin/mongo_tools_cli.py node import --file nodes.json
+python bin/mongo_tools_cli.py node import --file characters.csv --update
+python bin/mongo_tools_cli.py node export --file export.json --query '{"type": "location"}'
+python bin/mongo_tools_cli.py node export --file export.csv --fields "name,type,properties.health"
 ```
 
 For more detailed examples, see the [usage examples](../docs/usage_examples.md) documentation.
@@ -93,6 +102,66 @@ node = {
 }
 
 node_id = add_node(node)
+```
+
+### `import_nodes_from_json(file_path, update_existing=False)`
+Import multiple nodes from a JSON file.
+
+```python
+from mongo_tools.nodes import import_nodes_from_json
+
+# Import nodes, skipping existing ones
+summary = import_nodes_from_json('nodes.json')
+
+# Import and update existing nodes
+summary = import_nodes_from_json('nodes.json', update_existing=True)
+
+print(f"Added: {summary['added']}, Updated: {summary['updated']}")
+```
+
+### `import_nodes_from_csv(file_path, update_existing=False)`
+Import multiple nodes from a CSV file.
+
+```python
+from mongo_tools.nodes import import_nodes_from_csv
+
+# CSV file must have at least 'name' column
+summary = import_nodes_from_csv('nodes.csv')
+
+print(f"Added: {summary['added']}, Updated: {summary['updated']}")
+```
+
+### `export_nodes_to_json(file_path, query=None, include_ids=False)`
+Export nodes to a JSON file.
+
+```python
+from mongo_tools.nodes import export_nodes_to_json
+
+# Export all nodes
+count = export_nodes_to_json('export.json')
+
+# Export only character nodes
+count = export_nodes_to_json('characters.json', {'type': 'character'})
+
+# Export with MongoDB ObjectIds included
+count = export_nodes_to_json('export_with_ids.json', include_ids=True)
+```
+
+### `export_nodes_to_csv(file_path, query=None, fields=None)`
+Export nodes to a CSV file.
+
+```python
+from mongo_tools.nodes import export_nodes_to_csv
+
+# Export all nodes with auto-detected fields
+count = export_nodes_to_csv('export.csv')
+
+# Export only location nodes
+count = export_nodes_to_csv('locations.csv', {'type': 'location'})
+
+# Export with specific fields
+fields = ['name', 'type', 'properties.description', 'properties.visited']
+count = export_nodes_to_csv('export_fields.csv', fields=fields)
 ```
 
 ### `get_node_by_name(name)`
@@ -228,6 +297,16 @@ from mongo_tools.utility import clear_collection
 clear_collection('nodes')
 ```
 
+### `drop_database(db_name='test_db')`
+Drop an entire database, removing all collections and data.
+
+```python
+from mongo_tools.utility import drop_database
+
+# Use with extreme caution!
+drop_database('test_db')
+```
+
 ### `create_database_snapshot(directory='backups')`
 Create a JSON snapshot of the entire database.
 
@@ -259,76 +338,18 @@ stats = get_database_stats()
 
 ## Best Practices
 
-- Always close database connections after use
-- Use appropriate error handling in your code
-- Make regular database snapshots for backup
-- Use the CLI for quick operations
-- Properly structure your nodes and edges
-- Use meaningful property names
-- Consider using unique name identifiers for important nodes
-
-## Testing
-
-### Isolated Testing
-
-The MongoDB Tools package provides utilities for isolated testing to prevent test interference. The isolated testing approach ensures that each test runs in its own database environment, preventing side-effects between tests.
-
-To use the isolated testing utilities:
-
-1. Import the test utilities in your test file:
-```python
-from tests.test_utils import isolated_test_case
-```
-
-2. Use the `isolated_test_case` context manager to create an isolated environment:
-```python
-def test_something(self):
-    with isolated_test_case() as (db_name, backup_dir):
-        # Your test code here
-        # db_name is the unique test database name
-        # backup_dir is a temporary directory for snapshots
-```
-
-3. The context manager automatically cleans up after the test:
-   - It drops the test database when the test completes
-   - It removes the temporary backup directory
-
-Example test case:
-```python
-import unittest
-from tests.test_utils import isolated_test_case
-from mongo_tools.nodes import add_node, list_all_nodes
-
-class TestNodeOperations(unittest.TestCase):
-    def test_add_node(self):
-        with isolated_test_case() as (db_name, _):
-            # Add a test node
-            node_data = {"name": "Test Node", "type": "Test"}
-            node_id = add_node(node_data)
-            
-            # Verify the node was added
-            nodes = list_all_nodes()
-            self.assertEqual(len(nodes), 1)
-```
-
-### Advanced Isolation Features
-
-The test utilities module (`tests/test_utils.py`) provides several functions for test isolation:
-
-- `test_database(db_name=None)`: Creates an isolated test database
-- `create_test_backup_dir()`: Creates a temporary backup directory
-- `cleanup_test_backup_dir(backup_dir)`: Removes a temporary backup directory
-- `isolated_test_case(db_name=None)`: Convenience wrapper that combines the above
+1. Always ensure that MongoDB connections are properly closed by using the `try-finally` pattern or the wrapper class's close method.
+2. Use descriptive names for nodes and clear type categorization.
+3. Create regular database snapshots to prevent data loss.
+4. When using destructive operations like `drop_database`, always create a backup snapshot first.
+5. Consider performance implications for large collections and use appropriate indexes.
+6. Use the standardized logging system for better debugging and error tracking.
+7. Use the command-line interface for quick operations and testing.
 
 ## Troubleshooting
 
-- If MongoDB is not running, start the service with:
-  ```
-  net start MongoDB
-  ```
-
-- If you see a ResourceWarning about unclosed sockets, ensure you're using the connection within a proper context or explicitly closing it.
-
-- If operations are unexpectedly slow, check your MongoDB server performance and consider indexing frequently queried fields.
-
-- For test failures related to database state, ensure proper test isolation using the provided test utilities. 
+1. If MongoDB is not running, run `bin/mongodb_launcher.py` to start the service.
+2. Resource warnings about unclosed connections indicate that `db.close()` was not called. Use the proper connection management pattern.
+3. For large collections, consider using pagination in your queries to avoid memory issues.
+4. If encountering errors, check the logs in the `logs/` directory for detailed information.
+5. The CLI tool provides helpful error messages and can be used to diagnose common issues. 

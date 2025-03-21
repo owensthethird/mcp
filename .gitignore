@@ -35,4 +35,4 @@ mongo_data/
 *.swo
 
 # Logs
-*.log 
+*.log

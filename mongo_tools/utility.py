@@ -3,6 +3,10 @@ import json
 from bson import json_util
 import os
 import datetime
+import logging
+
+# Configure module logger
+logger = logging.getLogger(__name__)
 
 def clear_collection(collection_name, db_name='test_db'):
     """Remove all documents from a collection"""
@@ -14,6 +18,33 @@ def clear_collection(collection_name, db_name='test_db'):
         return result.deleted_count
     finally:
         db.client.close()
+
+def drop_database(db_name='test_db'):
+    """
+    Drop an entire database, completely removing all its collections and data.
+    
+    Args:
+        db_name (str): Name of the database to drop
+        
+    Returns:
+        bool: True if successful, False otherwise
+        
+    Warning:
+        This operation is irreversible and will delete ALL data in the specified database.
+        Use with extreme caution, especially in production environments.
+    """
+    client = get_db(db_name).client
+    try:
+        client.drop_database(db_name)
+        logger.info(f"💥 Dropped entire database: {db_name}")
+        print(f"💥 Dropped entire database: {db_name}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to drop database '{db_name}': {e}")
+        print(f"❌ Error dropping database: {e}")
+        return False
+    finally:
+        client.close()
 
 def create_database_snapshot(directory='backups'):
     """Create a JSON snapshot of the entire database"""
@@ -77,8 +108,4 @@ def get_database_stats():
         
         return stats
     finally:
-        db.client.close()
-
-# Aliases for function names to maintain consistency in tests
-create_snapshot = create_database_snapshot
-restore_snapshot = restore_database_snapshot 
+        db.client.close() 

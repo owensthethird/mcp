@@ -9,11 +9,12 @@ Usage:
     python mongo_tools_cli.py <command> [options]
 
 Commands:
-    node              Node operations (add, get, update, delete, list)
+    node              Node operations (add, get, update, delete, list, import, export)
     edge              Edge operations (add, get, remove)
     snapshot          Database snapshot operations (create, restore)
     stats             Show database statistics
     clear             Clear collections
+    drop              Drop entire database (use with extreme caution)
 """
 
 import os
@@ -32,8 +33,9 @@ if project_root not in sys.path:
 try:
     from mongo_tools.db_connect import get_db
     from mongo_tools.nodes import add_node, get_node_by_name, get_node_by_id, update_node, delete_node_by_name, list_all_nodes
+    from mongo_tools.nodes import import_nodes_from_json, import_nodes_from_csv, export_nodes_to_json, export_nodes_to_csv
     from mongo_tools.edges import add_edge, get_connections, remove_edge
-    from mongo_tools.utility import clear_collection, create_database_snapshot, restore_database_snapshot, get_database_stats
+    from mongo_tools.utility import clear_collection, create_database_snapshot, restore_database_snapshot, get_database_stats, drop_database
     from lib.logging_config import configure_logger
 except ImportError as e:
     print(f"Error importing required modules: {e}")
@@ -52,11 +54,12 @@ class MongoToolsCLI:
             usage="""mongo_tools_cli.py <command> [<args>]
 
 Commands:
-  node        Node operations (add, get, update, delete, list)
+  node        Node operations (add, get, update, delete, list, import, export)
   edge        Edge operations (add, get, remove)
   snapshot    Database snapshot operations (create, restore)
   stats       Show database statistics
   clear       Clear collections
+  drop        Drop entire database (use with extreme caution)
 """
         )
         self.parser.add_argument('command', help='Command to run')
@@ -108,6 +111,24 @@ Commands:
         list_parser = subparsers.add_parser('list', help='List all nodes')
         list_parser.add_argument('--limit', '-l', type=int, help='Maximum number of nodes to return')
         list_parser.add_argument('--sort', '-s', help='Field to sort by')
+        
+        # Import nodes
+        import_parser = subparsers.add_parser('import', help='Import multiple nodes from a file')
+        import_parser.add_argument('--file', '-f', required=True, help='File containing node data (JSON or CSV)')
+        import_parser.add_argument('--format', choices=['json', 'csv', 'auto'], default='auto',
+                                   help='Format of the input file (default: auto-detect from extension)')
+        import_parser.add_argument('--update', '-u', action='store_true', 
+                                  help='Update existing nodes instead of skipping them')
+        
+        # Export nodes
+        export_parser = subparsers.add_parser('export', help='Export nodes to a file')
+        export_parser.add_argument('--file', '-f', required=True, help='Output file path (JSON or CSV)')
+        export_parser.add_argument('--format', choices=['json', 'csv', 'auto'], default='auto',
+                                  help='Format of the output file (default: auto-detect from extension)')
+        export_parser.add_argument('--query', '-q', help='JSON query to filter nodes for export')
+        export_parser.add_argument('--include-ids', action='store_true', 
+                                  help='Include MongoDB ObjectIds in the exported data (JSON only)')
+        export_parser.add_argument('--fields', help='Comma-separated list of fields to include (CSV only)')
         
         args = parser.parse_args(sys.argv[2:])
         
@@ -216,6 +237,101 @@ Commands:
                 
             except Exception as e:
                 logger.error(f"Error listing nodes: {e}")
+                sys.exit(1)
+        
+        elif args.operation == 'import':
+            try:
+                # Determine file format from extension if auto
+                file_path = args.file
+                file_format = args.format
+                
+                if file_format == 'auto':
+                    if file_path.lower().endswith('.json'):
+                        file_format = 'json'
+                    elif file_path.lower().endswith('.csv'):
+                        file_format = 'csv'
+                    else:
+                        print(f"Unable to detect format from file extension: {file_path}")
+                        print("Please specify --format json or --format csv")
+                        sys.exit(1)
+                
+                print(f"Importing nodes from {file_path} (format: {file_format})...")
+                
+                if file_format == 'json':
+                    try:
+                        summary = import_nodes_from_json(file_path, args.update)
+                    except ValueError as e:
+                        print(f"Error: {e}")
+                        sys.exit(1)
+                elif file_format == 'csv':
+                    try:
+                        summary = import_nodes_from_csv(file_path, args.update)
+                    except ValueError as e:
+                        print(f"Error: {e}")
+                        sys.exit(1)
+                
+                # Print summary
+                print("\n📊 Import Summary:")
+                print(f"✅ Added: {summary['added']} new nodes")
+                print(f"🔄 Updated: {summary['updated']} existing nodes")
+                print(f"⏭️ Skipped: {summary['skipped']} existing nodes")
+                print(f"❌ Failed: {summary['failed']} nodes")
+                print(f"Total: {sum(summary.values())} nodes processed")
+                
+            except Exception as e:
+                logger.error(f"Error importing nodes: {e}")
+                sys.exit(1)
+        
+        elif args.operation == 'export':
+            try:
+                # Determine file format from extension if auto
+                file_path = args.file
+                file_format = args.format
+                
+                if file_format == 'auto':
+                    if file_path.lower().endswith('.json'):
+                        file_format = 'json'
+                    elif file_path.lower().endswith('.csv'):
+                        file_format = 'csv'
+                    else:
+                        print(f"Unable to detect format from file extension: {file_path}")
+                        print("Please specify --format json or --format csv")
+                        sys.exit(1)
+                
+                # Parse query if provided
+                query = None
+                if args.query:
+                    try:
+                        query = json.loads(args.query)
+                    except json.JSONDecodeError as e:
+                        print(f"Error parsing query: {e}")
+                        print("Query must be valid JSON. Example: '{\"type\": \"character\"}'")
+                        sys.exit(1)
+                
+                print(f"Exporting nodes to {file_path} (format: {file_format})...")
+                
+                if file_format == 'json':
+                    try:
+                        count = export_nodes_to_json(file_path, query, args.include_ids)
+                        print(f"✅ Exported {count} nodes to {file_path}")
+                    except Exception as e:
+                        print(f"Error exporting to JSON: {e}")
+                        sys.exit(1)
+                elif file_format == 'csv':
+                    try:
+                        # Parse fields if provided
+                        fields = None
+                        if args.fields:
+                            fields = [f.strip() for f in args.fields.split(',')]
+                            
+                        count = export_nodes_to_csv(file_path, query, fields)
+                        print(f"✅ Exported {count} nodes to {file_path}")
+                    except Exception as e:
+                        print(f"Error exporting to CSV: {e}")
+                        sys.exit(1)
+                
+            except Exception as e:
+                logger.error(f"Error exporting nodes: {e}")
                 sys.exit(1)
     
     def edge(self):
@@ -436,6 +552,53 @@ Commands:
                 
         except Exception as e:
             logger.error(f"Error clearing collection: {e}")
+            sys.exit(1)
+
+    def drop(self):
+        """Drop an entire database"""
+        parser = argparse.ArgumentParser(description='Drop entire database')
+        parser.add_argument('--db', '-d', default='test_db',
+                           help='Database name to drop (default: test_db)')
+        parser.add_argument('--force', '-f', action='store_true',
+                           help='Force operation without confirmation')
+        parser.add_argument('--confirm', '-c', help='Type the database name again to confirm deletion')
+        
+        args = parser.parse_args(sys.argv[2:])
+        
+        try:
+            # Multiple safety checks
+            if not args.force:
+                print("⚠️  WARNING: THIS OPERATION WILL PERMANENTLY DELETE ALL DATA IN THE DATABASE!")
+                print(f"⚠️  Database to drop: {args.db}")
+                
+                if args.confirm != args.db:
+                    confirm = input(f"To confirm, please type the database name '{args.db}' exactly: ")
+                    if confirm != args.db:
+                        print("Database names do not match. Operation cancelled.")
+                        return
+                
+                confirm = input(f"Final confirmation - Are you ABSOLUTELY SURE you want to DROP the entire '{args.db}' database? This CANNOT be undone! (yes/NO): ")
+                if confirm.lower() != 'yes':
+                    print("Operation cancelled")
+                    return
+            
+            # Create a snapshot before dropping (for safety)
+            print(f"Creating backup snapshot before dropping database '{args.db}'...")
+            snapshot_file = create_database_snapshot()
+            print(f"Backup saved to {snapshot_file}")
+            
+            # Drop the database
+            success = drop_database(args.db)
+            
+            if success:
+                print(f"Database '{args.db}' has been completely dropped.")
+                print(f"If this was a mistake, you can restore from the backup: {snapshot_file}")
+                print("Use: mongo_tools_cli.py snapshot restore --file BACKUP_FILE")
+            else:
+                print(f"Failed to drop database '{args.db}'.")
+                
+        except Exception as e:
+            logger.error(f"Error dropping database: {e}")
             sys.exit(1)
 
 def main():

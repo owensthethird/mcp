@@ -1,0 +1,6 @@
+name,type,properties.description,properties.health,properties.strength,properties.friendly,properties.visited,properties.danger_level,properties.contains_treasure
+Tavern,location,"A cozy tavern with warm fire and good food",,,,,2,false
+Old Man,character,"An elderly man with many stories to tell",75,3,true,,,
+Blacksmith,character,"A skilled blacksmith who can forge weapons",90,7,true,,,
+Abandoned Mine,location,"A dangerous mine that was abandoned years ago",,,,,5,true
+Treasure Chest,object,"A locked chest with unknown contents",,,,,,true 

@@ -17,9 +17,7 @@ import time
 import logging
 import json
 import pymongo
-import uuid
 from bson.objectid import ObjectId
-import functools
 
 # Add project root to path for imports if running directly
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -27,8 +25,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 # Import our MongoDB toolset modules
-from mongo_tools import db_connect
-from mongo_tools.db_connect import DBConnection
+from mongo_tools.db_connect import get_db, DBConnection
 from mongo_tools.nodes import add_node, get_node_by_name, get_node_by_id, update_node, delete_node_by_name, list_all_nodes
 from mongo_tools.edges import add_edge, get_connections, remove_edge
 from mongo_tools.notes import add_interaction_note, process_and_clear_notes
@@ -45,45 +42,24 @@ logger = logging.getLogger("mongo_tools_tests")
 class TestMongoTools(unittest.TestCase):
     """Test suite for MongoDB tools package"""
     
-    # Use a unique test database for isolation
-    TEST_DB_NAME = f"test_mongo_tools_{uuid.uuid4().hex[:8]}"
+    TEST_DB_NAME = "test_mongo_tools_db"
     BACKUP_DIR = "test_backups"
     
     @classmethod
     def setUpClass(cls):
         """Initialize test environment before any tests run"""
-        logger.info(f"Initializing MongoDB Toolset Tests with database: {cls.TEST_DB_NAME}")
+        logger.info("Initializing MongoDB Toolset Tests")
         
         # Check MongoDB connection before starting tests
         try:
             client = pymongo.MongoClient('mongodb://localhost:27017/', serverSelectionTimeoutMS=2000)
             client.admin.command('ismaster')
             logger.info("MongoDB is running and accessible")
-            
-            # Initialize test database with empty collections
-            db = client[cls.TEST_DB_NAME]
-            # Create the nodes collection if it doesn't exist
-            if "nodes" not in db.list_collection_names():
-                db.create_collection("nodes")
-            else:
-                db.nodes.delete_many({})
-            
             client.close()
         except Exception as e:
             logger.error(f"MongoDB connection error: {e}")
             logger.error("Please ensure MongoDB is running using mongodb_launcher.py")
             raise
-        
-        # Store the original get_db function for restoration later
-        cls.original_get_db = db_connect.get_db
-        
-        # Override the get_db function to always return our test database
-        @functools.wraps(db_connect.get_db)
-        def test_get_db(db_name=None, connection_string='mongodb://localhost:27017/', timeout=5000):
-            return cls.original_get_db(cls.TEST_DB_NAME, connection_string, timeout)
-        
-        # Replace the get_db function with our test version
-        db_connect.get_db = test_get_db
         
         # Create backup directory if needed
         if not os.path.exists(cls.BACKUP_DIR):
@@ -93,7 +69,7 @@ class TestMongoTools(unittest.TestCase):
     def setUp(self):
         """Set up test environment before each test"""
         # Create a fresh database connection
-        self.db = db_connect.get_db()
+        self.db = get_db(self.TEST_DB_NAME)
         # Clear collections before each test to start clean
         self.db.nodes.delete_many({})
         logger.debug("Cleared test collections for clean test environment")
@@ -121,11 +97,8 @@ class TestMongoTools(unittest.TestCase):
     
     def test_2_add_and_get_node(self):
         """Test adding and retrieving a node"""
-        # Create a unique prefix for node names
-        prefix = f"test2_{uuid.uuid4().hex[:4]}_"
-        
         test_node = {
-            "name": f"{prefix}character",
+            "name": "test_character",
             "type": "character",
             "properties": {
                 "description": "Test character for unit tests",
@@ -139,9 +112,9 @@ class TestMongoTools(unittest.TestCase):
         self.assertIsNotNone(node_id)
         
         # Retrieve by name
-        node = get_node_by_name(f"{prefix}character")
+        node = get_node_by_name("test_character")
         self.assertIsNotNone(node)
-        self.assertEqual(node["name"], f"{prefix}character")
+        self.assertEqual(node["name"], "test_character")
         self.assertEqual(node["properties"]["description"], "Test character for unit tests")
         self.assertEqual(node["properties"]["health"], 100)
         
@@ -154,12 +127,9 @@ class TestMongoTools(unittest.TestCase):
     
     def test_3_update_node(self):
         """Test updating a node"""
-        # Create a unique prefix for node names
-        prefix = f"test3_{uuid.uuid4().hex[:4]}_"
-        
         # Add a node first
         test_node = {
-            "name": f"{prefix}update_test",
+            "name": "update_test",
             "type": "item",
             "properties": {
                 "value": 10
@@ -178,7 +148,7 @@ class TestMongoTools(unittest.TestCase):
         self.assertEqual(modified_count, 1)
         
         # Verify the update
-        node = get_node_by_name(f"{prefix}update_test")
+        node = get_node_by_name("update_test")
         self.assertEqual(node["properties"]["value"], 20)
         self.assertEqual(node["properties"]["rarity"], "common")
         
@@ -186,27 +156,24 @@ class TestMongoTools(unittest.TestCase):
     
     def test_4_delete_node(self):
         """Test deleting a node"""
-        # Create a unique prefix for node names
-        prefix = f"test4_{uuid.uuid4().hex[:4]}_"
-        
         # Add a node first
         test_node = {
-            "name": f"{prefix}to_be_deleted",
+            "name": "to_be_deleted",
             "type": "location"
         }
         
         add_node(test_node)
         
         # Verify it exists
-        node = get_node_by_name(f"{prefix}to_be_deleted")
+        node = get_node_by_name("to_be_deleted")
         self.assertIsNotNone(node)
         
         # Delete the node
-        deleted_count = delete_node_by_name(f"{prefix}to_be_deleted")
+        deleted_count = delete_node_by_name("to_be_deleted")
         self.assertEqual(deleted_count, 1)
         
         # Verify it's gone
-        node = get_node_by_name(f"{prefix}to_be_deleted")
+        node = get_node_by_name("to_be_deleted")
         self.assertIsNone(node)
         
         # Test deleting non-existent node
@@ -217,18 +184,12 @@ class TestMongoTools(unittest.TestCase):
     
     def test_5_list_all_nodes(self):
         """Test listing nodes with various options"""
-        # Clear nodes to ensure we start fresh
-        self.db.nodes.delete_many({})
-        
-        # Create a unique prefix for node names
-        prefix = f"test5_{uuid.uuid4().hex[:4]}_"
-        
         # Add multiple nodes
         node_names = ["node_a", "node_b", "node_c"]
         
         for idx, name in enumerate(node_names):
             add_node({
-                "name": f"{prefix}{name}",
+                "name": name,
                 "type": "test",
                 "priority": idx + 1
             })
@@ -243,23 +204,20 @@ class TestMongoTools(unittest.TestCase):
         
         # Test with sorting (ascending)
         sorted_nodes_asc = list_all_nodes(sort_field="name", sort_direction=1)
-        self.assertEqual(sorted_nodes_asc[0]["name"], f"{prefix}node_a")
+        self.assertEqual(sorted_nodes_asc[0]["name"], "node_a")
         
         # Test with sorting (descending)
         sorted_nodes_desc = list_all_nodes(sort_field="name", sort_direction=-1)
-        self.assertEqual(sorted_nodes_desc[0]["name"], f"{prefix}node_c")
+        self.assertEqual(sorted_nodes_desc[0]["name"], "node_c")
         
         logger.info("Node listing functionality verified")
     
     def test_6_add_and_get_edges(self):
         """Test adding and retrieving connections between nodes"""
-        # Create a unique prefix for node names
-        prefix = f"test6_{uuid.uuid4().hex[:4]}_"
-        
         # Add three nodes
-        node1 = {"name": f"{prefix}source_node", "type": "location"}
-        node2 = {"name": f"{prefix}target_node_1", "type": "location"}
-        node3 = {"name": f"{prefix}target_node_2", "type": "location"}
+        node1 = {"name": "source_node", "type": "location"}
+        node2 = {"name": "target_node_1", "type": "location"}
+        node3 = {"name": "target_node_2", "type": "location"}
         
         source_id = add_node(node1)
         target_id1 = add_node(node2)
@@ -282,7 +240,7 @@ class TestMongoTools(unittest.TestCase):
         self.assertEqual(len(connections), 2)
         
         # Test connection properties
-        conn_types = [conn.get("type") for conn in connections]
+        conn_types = [conn["type"] for conn in connections]
         self.assertIn("path", conn_types)
         self.assertIn("road", conn_types)
         
@@ -293,17 +251,14 @@ class TestMongoTools(unittest.TestCase):
         # Verify connection was removed
         connections = get_connections(source_id)
         self.assertEqual(len(connections), 1)
-        self.assertEqual(connections[0].get("type"), "road")
+        self.assertEqual(connections[0]["type"], "road")
         
         logger.info("Edge management functionality verified")
     
     def test_7_interaction_notes(self):
         """Test adding and processing interaction notes"""
-        # Create a unique prefix for node names
-        prefix = f"test7_{uuid.uuid4().hex[:4]}_"
-        
         # Add a node
-        node = {"name": f"{prefix}npc_with_notes", "type": "character"}
+        node = {"name": "npc_with_notes", "type": "character"}
         node_id = add_node(node)
         
         # Add interaction notes
@@ -326,7 +281,7 @@ class TestMongoTools(unittest.TestCase):
         self.assertTrue(added2)
         
         # Verify notes were added
-        node = get_node_by_name(f"{prefix}npc_with_notes")
+        node = get_node_by_name("npc_with_notes")
         self.assertEqual(len(node["next_interaction_notes"]), 2)
         
         # Process notes
@@ -334,7 +289,7 @@ class TestMongoTools(unittest.TestCase):
         self.assertTrue(processed)
         
         # Verify only persistent note remains
-        node = get_node_by_name(f"{prefix}npc_with_notes")
+        node = get_node_by_name("npc_with_notes")
         self.assertEqual(len(node["next_interaction_notes"]), 1)
         self.assertEqual(node["next_interaction_notes"][0]["trigger"], "revisit")
         
@@ -342,23 +297,16 @@ class TestMongoTools(unittest.TestCase):
     
     def test_8_database_snapshots(self):
         """Test database snapshot creation and restoration"""
-        # Clear nodes to ensure we start fresh
-        self.db.nodes.delete_many({})
-        
-        # Create a unique prefix for node names
-        prefix = f"test8_{uuid.uuid4().hex[:4]}_"
-        
         # Add some test nodes
         for i in range(3):
-            add_node({"name": f"{prefix}snapshot_test_{i}", "type": "item"})
+            add_node({"name": f"snapshot_test_{i}", "type": "item"})
         
         # Create snapshot
         snapshot_file = create_database_snapshot(self.BACKUP_DIR)
         self.assertTrue(os.path.exists(snapshot_file))
         
         # Clear database
-        self.db.nodes.delete_many({})
-        
+        clear_collection('nodes')
         nodes = list_all_nodes()
         self.assertEqual(len(nodes), 0)
         
@@ -380,15 +328,9 @@ class TestMongoTools(unittest.TestCase):
     
     def test_9_database_stats(self):
         """Test getting database statistics"""
-        # Clear nodes to ensure we start fresh
-        self.db.nodes.delete_many({})
-        
-        # Create a unique prefix for node names
-        prefix = f"test9_{uuid.uuid4().hex[:4]}_"
-        
         # Add some test nodes
         for i in range(3):
-            add_node({"name": f"{prefix}stats_test_{i}", "type": "item"})
+            add_node({"name": f"stats_test_{i}", "type": "item"})
         
         # Get stats
         stats = get_database_stats()
@@ -425,19 +367,13 @@ class TestMongoTools(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         """Clean up the test environment after all tests"""
-        # Restore the original get_db function
-        db_connect.get_db = cls.original_get_db
-        
         # Clean up test database
-        client = pymongo.MongoClient('mongodb://localhost:27017/')
+        db = get_db(cls.TEST_DB_NAME)
         try:
-            # Drop the entire test database
-            client.drop_database(cls.TEST_DB_NAME)
-            logger.info(f"Dropped test database: {cls.TEST_DB_NAME}")
-        except Exception as e:
-            logger.error(f"Error dropping test database: {e}")
+            db.nodes.delete_many({})
+            logger.debug("Cleaned up test database")
         finally:
-            client.close()
+            db.close()
         
         # Remove test backup files
         if os.path.exists(cls.BACKUP_DIR):
