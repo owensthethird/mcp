@@ -259,17 +259,76 @@ stats = get_database_stats()
 
 ## Best Practices
 
-1. Always ensure that MongoDB connections are properly closed by using the `try-finally` pattern or the wrapper class's close method.
-2. Use descriptive names for nodes and clear type categorization.
-3. Create regular database snapshots to prevent data loss.
-4. Consider performance implications for large collections and use appropriate indexes.
-5. Use the standardized logging system for better debugging and error tracking.
-6. Use the command-line interface for quick operations and testing.
+- Always close database connections after use
+- Use appropriate error handling in your code
+- Make regular database snapshots for backup
+- Use the CLI for quick operations
+- Properly structure your nodes and edges
+- Use meaningful property names
+- Consider using unique name identifiers for important nodes
+
+## Testing
+
+### Isolated Testing
+
+The MongoDB Tools package provides utilities for isolated testing to prevent test interference. The isolated testing approach ensures that each test runs in its own database environment, preventing side-effects between tests.
+
+To use the isolated testing utilities:
+
+1. Import the test utilities in your test file:
+```python
+from tests.test_utils import isolated_test_case
+```
+
+2. Use the `isolated_test_case` context manager to create an isolated environment:
+```python
+def test_something(self):
+    with isolated_test_case() as (db_name, backup_dir):
+        # Your test code here
+        # db_name is the unique test database name
+        # backup_dir is a temporary directory for snapshots
+```
+
+3. The context manager automatically cleans up after the test:
+   - It drops the test database when the test completes
+   - It removes the temporary backup directory
+
+Example test case:
+```python
+import unittest
+from tests.test_utils import isolated_test_case
+from mongo_tools.nodes import add_node, list_all_nodes
+
+class TestNodeOperations(unittest.TestCase):
+    def test_add_node(self):
+        with isolated_test_case() as (db_name, _):
+            # Add a test node
+            node_data = {"name": "Test Node", "type": "Test"}
+            node_id = add_node(node_data)
+            
+            # Verify the node was added
+            nodes = list_all_nodes()
+            self.assertEqual(len(nodes), 1)
+```
+
+### Advanced Isolation Features
+
+The test utilities module (`tests/test_utils.py`) provides several functions for test isolation:
+
+- `test_database(db_name=None)`: Creates an isolated test database
+- `create_test_backup_dir()`: Creates a temporary backup directory
+- `cleanup_test_backup_dir(backup_dir)`: Removes a temporary backup directory
+- `isolated_test_case(db_name=None)`: Convenience wrapper that combines the above
 
 ## Troubleshooting
 
-1. If MongoDB is not running, run `bin/mongodb_launcher.py` to start the service.
-2. Resource warnings about unclosed connections indicate that `db.close()` was not called. Use the proper connection management pattern.
-3. For large collections, consider using pagination in your queries to avoid memory issues.
-4. If encountering errors, check the logs in the `logs/` directory for detailed information.
-5. The CLI tool provides helpful error messages and can be used to diagnose common issues. 
+- If MongoDB is not running, start the service with:
+  ```
+  net start MongoDB
+  ```
+
+- If you see a ResourceWarning about unclosed sockets, ensure you're using the connection within a proper context or explicitly closing it.
+
+- If operations are unexpectedly slow, check your MongoDB server performance and consider indexing frequently queried fields.
+
+- For test failures related to database state, ensure proper test isolation using the provided test utilities. 

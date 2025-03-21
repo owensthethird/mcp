@@ -77,4 +77,8 @@ def get_database_stats():
         
         return stats
     finally:
-        db.client.close() 
+        db.client.close()
+
+# Aliases for function names to maintain consistency in tests
+create_snapshot = create_database_snapshot
+restore_snapshot = restore_database_snapshot 
