@@ -24,6 +24,55 @@ result = collection.find_one({})
 db.close()
 ```
 
+## Command-Line Interface
+
+The MongoDB toolset includes a command-line interface for easy access to common operations. The CLI script is located at `bin/mongo_tools_cli.py`.
+
+### Basic Usage
+
+```bash
+# Show available commands
+python bin/mongo_tools_cli.py --help
+
+# Node operations
+python bin/mongo_tools_cli.py node add --name "Test Node" --type "location"
+python bin/mongo_tools_cli.py node get --name "Test Node"
+python bin/mongo_tools_cli.py node list
+
+# Edge operations
+python bin/mongo_tools_cli.py edge add --from "Source Node" --to "Target Node"
+python bin/mongo_tools_cli.py edge get --name "Source Node"
+
+# Database operations
+python bin/mongo_tools_cli.py stats
+python bin/mongo_tools_cli.py snapshot create
+python bin/mongo_tools_cli.py clear --collection nodes
+```
+
+For more detailed examples, see the [usage examples](../docs/usage_examples.md) documentation.
+
+## Logging
+
+The MongoDB toolset uses a standardized logging system that writes logs to console and files:
+
+- `logs/mcp.log`: Contains all application logs
+- `logs/mcp_errors.log`: Contains only error-level logs
+
+To configure logging in your own scripts that use mongo_tools:
+
+```python
+from lib.logging_config import configure_logger
+
+# Configure a logger for your module
+logger = configure_logger("my_module")
+
+# Use the logger
+logger.debug("Debug message")
+logger.info("Info message")
+logger.warning("Warning message")
+logger.error("Error message")
+```
+
 ## Node Operations
 
 Functions to manage nodes in the database:
@@ -55,6 +104,17 @@ from mongo_tools.nodes import get_node_by_name
 node = get_node_by_name("character_name")
 ```
 
+### `get_node_by_id(node_id)`
+Retrieve a node by its ID.
+
+```python
+from mongo_tools.nodes import get_node_by_id
+from bson.objectid import ObjectId
+
+node_id = ObjectId("5f7b1a2b3c4d5e6f7a8b9c0d")
+node = get_node_by_id(node_id)
+```
+
 ### `update_node(node_id, updates)`
 Update a node with specified updates.
 
@@ -78,13 +138,17 @@ from mongo_tools.nodes import delete_node_by_name
 delete_node_by_name("character_name")
 ```
 
-### `list_all_nodes()`
-List all nodes in the database.
+### `list_all_nodes(limit=None, sort_field=None, sort_direction=1)`
+List all nodes in the database with optional sorting and limiting.
 
 ```python
 from mongo_tools.nodes import list_all_nodes
 
+# Get all nodes
 all_nodes = list_all_nodes()
+
+# Get top 10 nodes sorted by name
+sorted_nodes = list_all_nodes(limit=10, sort_field="name", sort_direction=1)
 ```
 
 ## Edge Operations
@@ -199,9 +263,13 @@ stats = get_database_stats()
 2. Use descriptive names for nodes and clear type categorization.
 3. Create regular database snapshots to prevent data loss.
 4. Consider performance implications for large collections and use appropriate indexes.
+5. Use the standardized logging system for better debugging and error tracking.
+6. Use the command-line interface for quick operations and testing.
 
 ## Troubleshooting
 
-1. If MongoDB is not running, run `mongodb_launcher.py` to start the service.
+1. If MongoDB is not running, run `bin/mongodb_launcher.py` to start the service.
 2. Resource warnings about unclosed connections indicate that `db.close()` was not called. Use the proper connection management pattern.
-3. For large collections, consider using pagination in your queries to avoid memory issues. 
+3. For large collections, consider using pagination in your queries to avoid memory issues.
+4. If encountering errors, check the logs in the `logs/` directory for detailed information.
+5. The CLI tool provides helpful error messages and can be used to diagnose common issues. 
