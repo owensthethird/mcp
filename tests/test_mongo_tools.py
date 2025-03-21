@@ -1,8 +1,13 @@
+#!/usr/bin/env python3
 import unittest
 import os
+import sys
 import time
 import pymongo
 from bson.objectid import ObjectId
+
+# Add parent directory to sys.path to allow imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import our MongoDB toolset modules
 from mongo_tools.db_connect import get_db
@@ -24,7 +29,7 @@ class TestMongoTools(unittest.TestCase):
             client.close()
         except Exception as e:
             print(f"❌ MongoDB connection error: {e}")
-            print("Please ensure MongoDB is running using mongodb_launcher.py")
+            print("Please ensure MongoDB is running using bin/mongodb_launcher.py")
             raise
         
         # Create backup directory if needed
